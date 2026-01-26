@@ -4,6 +4,10 @@ from django.db.models import Count
 from apps.bookings.models import Booking
 from apps.inventory.models import FlightInstance
 
+from django.core.exceptions import PermissionDenied
+from django.db import transaction
+
+
 
 class BookingError(Exception):
     pass
@@ -46,4 +50,18 @@ def create_booking(*, user, flight_instance_id: int) -> Booking:
         status=Booking.STATUS_PENDING,
     )
 
+    return booking
+
+def cancel_booking(*, booking: Booking, user) -> Booking:
+    # Permission: owner or staff
+    if booking.user_id != user.id and not user.is_staff:
+        raise PermissionDenied("You do not have permission to cancel this booking.")
+
+    # Idempotent cancel
+    if booking.status == "cancelled":
+        return booking
+
+    with transaction.atomic():
+        booking.status = "cancelled"
+        booking.save(update_fields=["status"])
     return booking
